@@ -1,27 +1,27 @@
-#include "../kernel/file_manager.c"
+#include "../kernel/file_manager.h"
 
 void test_file_manager() {
-    // Test tạo file
+    printf("Bắt đầu kiểm thử File Manager...\n");
+
+    // Tạo tệp
     create_file("test1.txt");
     create_file("test2.txt");
 
-    // Test ghi và đọc file
+    // Ghi và đọc nội dung
     write_file("test1.txt", "Hello, World!");
     read_file("test1.txt");
 
-    // Test xóa file
-    delete_file("test1.txt");
-    read_file("test1.txt"); // Kiểm tra file đã bị xóa
+    // Kiểm tra số lượng file
+    printf("Số lượng file hiện tại: %d\n", get_file_count());
 
-    // Danh sách file sau khi xóa
-    for (int i = 0; i < file_count; i++) {
-        printf("Remaining file: %s\n", file_table[i].name);
-    }
+    // Xóa tệp
+    delete_file("test1.txt");
+    read_file("test1.txt"); // Kiểm tra đọc sau khi xóa
+
+    printf("Kiểm thử hoàn thành.\n");
 }
 
 int main() {
-    printf("Running tests for File Manager...\n");
     test_file_manager();
-    printf("Tests completed.\n");
     return 0;
 }
