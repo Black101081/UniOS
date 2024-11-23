@@ -6,12 +6,10 @@
 void *allocate_memory(size_t size) {
     void *block = malloc(size);
     if (block) {
-        printf("Allocated %zu bytes at %p
-", size, block);
+        printf("Allocated %zu bytes at %p\n", size, block);
         memset(block, 0, size); // Khởi tạo bộ nhớ với 0
     } else {
-        printf("Memory allocation failed!
-");
+        printf("Memory allocation failed!");
     }
     return block;
 }
@@ -19,7 +17,6 @@ void *allocate_memory(size_t size) {
 void free_memory(void *block) {
     if (block) {
         free(block);
-        printf("Memory freed at %p
-", block);
+        printf("Memory freed at %p\n", block);
     }
 }
