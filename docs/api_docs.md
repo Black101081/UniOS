@@ -1,10 +1,15 @@
 # UniOS API Documentation
 
-## Mục tiêu
-API của UniOS cung cấp:
-- Giao tiếp với kernel.
-- Hỗ trợ quản lý tiến trình, bộ nhớ và hệ thống tập tin.
+## Chức năng API
 
-## Hướng dẫn phát triển
-1. Tích hợp `api_core.c` vào ứng dụng.
-2. Mở rộng các dịch vụ như quản lý tệp và giao tiếp mạng.
+### 1. Quản lý sandbox
+- **api_create_sandbox(const char *process_name):**
+  - Tạo sandbox cho tiến trình chỉ định.
+- **api_terminate_sandbox(int sandbox_id):**
+  - Kết thúc sandbox với ID được chỉ định.
+
+Cách sử dụng:
+```c
+api_create_sandbox("Process1");
+api_terminate_sandbox(1);
+```

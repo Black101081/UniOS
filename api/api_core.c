@@ -1,14 +1,14 @@
 #include <stdio.h>
 
-// API: Quản lý tệp cơ bản
-void api_create_file(const char *filename) {
-    printf("API: Tạo tệp %s.
-", filename);
-    // Gửi yêu cầu giả lập tới kernel (chưa thực hiện)
+// API: Quản lý sandbox
+void api_create_sandbox(const char *process_name) {
+    printf("API: Tạo sandbox cho tiến trình \"%s\".
+", process_name);
+    create_sandbox(process_name); // Gọi kernel
 }
 
-void api_delete_file(const char *filename) {
-    printf("API: Xóa tệp %s.
-", filename);
-    // Gửi yêu cầu giả lập tới kernel (chưa thực hiện)
+void api_terminate_sandbox(int sandbox_id) {
+    printf("API: Kết thúc sandbox với ID %d.
+", sandbox_id);
+    terminate_sandbox(sandbox_id); // Gọi kernel
 }

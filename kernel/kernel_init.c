@@ -1,6 +1,7 @@
 #include "memory_manager.c"
 #include "process_manager.c"
 #include "file_manager.c"
+#include "sandbox_manager.c"
 
 void kernel_main() {
     printf("UniOS Kernel Initialized!");
@@ -9,13 +10,11 @@ void kernel_main() {
     void *mem = allocate_memory(1024);
 
     // Test quản lý tiến trình
-    create_process("TestProcess1");
-    create_process("TestProcess2");
-    terminate_process(1);
+    create_process("Process1");
+    create_sandbox("Process1"); // Tạo sandbox cho tiến trình
 
-    // Test quản lý tập tin
-    create_file("example.txt");
-    delete_file("example.txt");
+    terminate_sandbox(1); // Kết thúc sandbox
+    terminate_process(1); // Kết thúc tiến trình
 
     free_memory(mem);
 
