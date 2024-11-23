@@ -1,10 +1,21 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include "memory_manager.c"
+#include "process_manager.c"
 
-// Khởi động kernel cơ bản
 void kernel_main() {
-    printf("UniOS Kernel Initialized!\n");
+    printf("UniOS Kernel Initialized!
+");
+
+    // Test quản lý bộ nhớ
+    void *mem = allocate_memory(1024);
+
+    // Test quản lý tiến trình
+    create_process("TestProcess1");
+    create_process("TestProcess2");
+    terminate_process(1);
+
+    free_memory(mem);
+
     while (1) {
-        // Kernel loop (chờ xử lý các tác vụ)
+        // Kernel loop
     }
 }
