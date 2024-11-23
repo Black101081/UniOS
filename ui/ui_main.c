@@ -1,14 +1,10 @@
 #include <stdio.h>
+#include "../kernel/file_manager.h"
 #include "../api/api_core.c"
 
 #define MAX_FILES 100 // Định nghĩa số lượng tệp tối đa
 
-struct File {
-    char name[50];
-    // ... các thuộc tính khác nếu cần ...
-};
-
-struct File file_table[MAX_FILES]; // Khai báo mảng tệp
+struct File file_table[10]; // Đảm bảo khai báo nhất quán
 
 int file_count = 0;
 

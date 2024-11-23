@@ -1,14 +1,9 @@
 #include <stdio.h>
 #include <string.h>
-
-typedef struct {
-    char name[50];      // Tên file
-    char content[1024]; // Nội dung file
-    int is_open;        // Trạng thái mở file
-} File;
+#include "file_manager.h"
 
 File file_table[10];    // Bảng lưu trữ file
-int file_count = 0;     // Số lượng file hiện tại
+extern int file_count;     // Số lượng file hiện tại
 
 // Hàm tạo file
 void create_file(const char *name) {
