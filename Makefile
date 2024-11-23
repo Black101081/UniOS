@@ -1,18 +1,20 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -I./kernel -I./api
+CFLAGS = -Wall -Wextra -I.
 
-KERNEL_SRC = kernel/file_manager.c kernel/memory_manager.c kernel/process_manager.c kernel/sandbox_manager.c
-API_SRC = api/api_core.c
-UI_SRC = ui/ui_main.c
-TEST_SRC = test/test_file_manager.c
+SRC_DIR = kernel/core
+BUILD_DIR = build
+TEST_DIR = test
 
-all: ui_main test_file_manager
+.PHONY: all clean test
 
-ui_main: $(KERNEL_SRC) $(API_SRC) $(UI_SRC)
-	$(CC) $(CFLAGS) -o $@ $^
+all: $(BUILD_DIR)/kernel
 
-test_file_manager: $(KERNEL_SRC) $(TEST_SRC)
-	$(CC) $(CFLAGS) -o $@ $^
+$(BUILD_DIR)/kernel: $(SRC_DIR)/*.c
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) $^ -o $@
+
+test: $(TEST_DIR)/*.c
+	$(CC) $(CFLAGS) $^ -o $(BUILD_DIR)/test
 
 clean:
-	rm -f ui_main test_file_manager
+	rm -rf $(BUILD_DIR)

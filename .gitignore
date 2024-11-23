@@ -1,0 +1,15 @@
+# Build files
+*.o
+*.exe
+*.out
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+
+# Build directory
+build/
+
+# Dependencies
+vendor/
