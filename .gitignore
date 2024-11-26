@@ -1,0 +1,15 @@
+# Cache files
+**/caching/**/*.cache
+
+# Logs
+**/monitoring/**/*.log
+
+# Temp files
+**/tmp/
+
+# Model files
+**/ai/**/*.model
+
+# Security keys
+**/security/**/*.key
+**/security/**/*.pem
