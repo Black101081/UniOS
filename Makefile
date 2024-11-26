@@ -19,9 +19,9 @@ test_process: $(TEST_DIR)/kernel/test_process_manager.c $(SRC_DIR)/process/proce
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) $^ -o $(BUILD_DIR)/test_process
 
-test_memory: $(TEST_DIR)/kernel/test_memory_manager.c $(SRC_DIR)/memory/memory_manager.c
-	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) $^ -o $(BUILD_DIR)/test_memory
+test_memory: test/kernel/test_memory_manager.c kernel/core/memory/memory_manager.c
+	$(CC) $(CFLAGS) -I. $^ -o build/test_memory
+	./build/test_memory
 
 clean:
 	rm -rf $(BUILD_DIR)
