@@ -1,0 +1,20 @@
+Olympex Backtest Results — trades 1min
+==================================================
+Bars: 5004
+Trend entries: 103
+MR entries: 0
+                                                         trader_id  ... is_snapshot
+position_id                                                         ...            
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-9f...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-f9...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-4e...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-be...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-6f...  BACKTESTER-001  ...        True
+...                                                            ...  ...         ...
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-17...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-94...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-e5...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-e2...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000        BACKTESTER-001  ...       False
+
+[103 rows x 21 columns]

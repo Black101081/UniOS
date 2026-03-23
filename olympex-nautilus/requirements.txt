@@ -1,0 +1,6 @@
+nautilus_trader>=1.218.0,<1.222.0
+pandas
+numpy
+pyarrow
+huggingface_hub
+matplotlib
