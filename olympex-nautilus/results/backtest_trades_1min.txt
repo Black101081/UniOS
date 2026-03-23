@@ -1,20 +1,20 @@
 Olympex Backtest Results — trades 1min
 ==================================================
 Bars: 5004
-Trend entries: 103
-MR entries: 0
+Trend entries: 16
+MR entries: 112
                                                          trader_id  ... is_snapshot
 position_id                                                         ...            
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-9f...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-f9...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-4e...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-be...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-6f...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-08...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-00...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-26...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-ac...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-19...  BACKTESTER-001  ...        True
 ...                                                            ...  ...         ...
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-17...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-94...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-e5...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-e2...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-b0...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-4e...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-56...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-c5...  BACKTESTER-001  ...        True
 BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000        BACKTESTER-001  ...       False
 
-[103 rows x 21 columns]
+[128 rows x 21 columns]

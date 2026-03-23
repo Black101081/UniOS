@@ -243,20 +243,24 @@ class OlympexStrategy(Strategy):
                 self._enter_trade(OrderSide.SELL, price, atr, "TREND_BEAR")
                 return
 
-        # MEAN REVERSION: BB bounce + RSI confirmation
+        # MEAN REVERSION: BB bounce OR RSI extreme (relaxed from AND to OR)
         # Allow in ranging market OR weak trends (|score| < 2.0)
-        if not regime.is_trending and regime.confidence >= config.confidence_threshold:
+        if not regime.is_trending:
             bb_range = bb_upper - bb_lower
             if bb_range > 0:
                 bb_percent = (price - bb_lower) / bb_range
 
-                # Buy at lower band
-                if bb_percent <= 0.15 and rsi < config.mr_rsi_buy_threshold:
+                # Buy signal: price near lower band OR RSI oversold
+                buy_bb = bb_percent <= 0.20
+                buy_rsi = rsi < config.mr_rsi_buy_threshold
+                if buy_bb or buy_rsi:
                     self._enter_trade(OrderSide.BUY, price, atr, "MR_BUY")
                     return
 
-                # Sell at upper band
-                if bb_percent >= 0.85 and rsi > config.mr_rsi_sell_threshold:
+                # Sell signal: price near upper band OR RSI overbought
+                sell_bb = bb_percent >= 0.80
+                sell_rsi = rsi > config.mr_rsi_sell_threshold
+                if sell_bb or sell_rsi:
                     self._enter_trade(OrderSide.SELL, price, atr, "MR_SELL")
                     return
 
