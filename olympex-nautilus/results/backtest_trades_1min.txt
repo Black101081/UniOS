@@ -5,16 +5,16 @@ Trend entries: 16
 MR entries: 112
                                                          trader_id  ... is_snapshot
 position_id                                                         ...            
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-08...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-00...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-26...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-ac...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-19...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-d5...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-ce...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-f0...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-33...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-58...  BACKTESTER-001  ...        True
 ...                                                            ...  ...         ...
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-b0...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-4e...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-56...  BACKTESTER-001  ...        True
-BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-c5...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-e0...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-53...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-06...  BACKTESTER-001  ...        True
+BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000-ec...  BACKTESTER-001  ...        True
 BTCUSDT-PERP.HYPERLIQUID-OlympexStrategy-000        BACKTESTER-001  ...       False
 
 [128 rows x 21 columns]
