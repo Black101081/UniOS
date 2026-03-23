@@ -2,7 +2,9 @@
 Olympex Backtest Runner — Run adaptive strategy on real BTC data.
 
 Usage:
-    python run_backtest.py [--data-source candles|trades] [--interval 1min|5min]
+    python run_backtest.py [--days 30]
+
+Data: Downloads real 1-min candles from Hyperliquid API if not cached.
 """
 
 import sys
@@ -31,14 +33,14 @@ DATA_DIR = Path(__file__).parent / "data"
 RESULTS_DIR = Path(__file__).parent / "results"
 
 
-def create_btcusdt_instrument() -> CryptoPerpetual:
-    """Create a BTCUSDT perpetual instrument for Hyperliquid."""
+def create_instrument() -> CryptoPerpetual:
+    """Create a BTC-USD perpetual instrument for Hyperliquid (USDC-settled)."""
     return CryptoPerpetual(
-        instrument_id=InstrumentId.from_str("BTCUSDT-PERP.HYPERLIQUID"),
-        raw_symbol=Symbol("BTCUSDT-PERP"),
+        instrument_id=InstrumentId.from_str("BTC-USD-PERP.HYPERLIQUID"),
+        raw_symbol=Symbol("BTC-USD-PERP"),
         base_currency=Currency.from_str("BTC"),
-        quote_currency=Currency.from_str("USDT"),
-        settlement_currency=Currency.from_str("USDT"),
+        quote_currency=Currency.from_str("USD"),
+        settlement_currency=Currency.from_str("USDC"),
         is_inverse=False,
         price_precision=1,
         size_precision=5,
@@ -47,7 +49,7 @@ def create_btcusdt_instrument() -> CryptoPerpetual:
         max_quantity=Quantity.from_str("1000.00000"),
         min_quantity=Quantity.from_str("0.00001"),
         max_notional=None,
-        min_notional=Money(10.00, Currency.from_str("USDT")),
+        min_notional=Money(10.00, Currency.from_str("USDC")),
         max_price=Price.from_str("1000000.0"),
         min_price=Price.from_str("0.1"),
         margin_init=Decimal("0.05"),
@@ -59,32 +61,46 @@ def create_btcusdt_instrument() -> CryptoPerpetual:
     )
 
 
-def load_candle_data(instrument: CryptoPerpetual, source: str = "candles", interval: str = "1min") -> list[Bar]:
-    """Load candle data and convert to NautilusTrader Bar objects."""
+def ensure_data(days: int = 30) -> Path:
+    """Download candle data if not present or stale."""
+    filepath = DATA_DIR / "btc_candles_1min.parquet"
 
-    if source == "candles":
-        filepath = DATA_DIR / "btc_candles_1min.parquet"
-    elif source == "trades":
-        filepath = DATA_DIR / f"btc_candles_from_trades_{interval}.parquet"
-    else:
-        raise ValueError(f"Unknown source: {source}")
+    if filepath.exists():
+        df = pd.read_parquet(filepath)
+        # Check if we have enough data and it's real exchange candles
+        if len(df) >= 1000 and "coin" in df.columns:
+            ts_col = "timestamp"
+            time_range = df[ts_col].max() - df[ts_col].min()
+            hours = time_range.total_seconds() / 3600 if hasattr(time_range, "total_seconds") else 0
+            if hours >= 24:
+                print(f"Using cached data: {len(df)} candles ({hours:.0f}h coverage)")
+                return filepath
 
-    if not filepath.exists():
-        print(f"Data file not found: {filepath}")
-        print("Run 'python scripts/download_data.py' first to download data.")
+    print(f"Downloading fresh {days}-day candle data from Hyperliquid API...")
+    from scripts.download_hyperliquid import download_candles
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    df = download_candles(coin="BTC", days=days)
+    if len(df) == 0:
+        print("ERROR: Failed to download candle data.")
         sys.exit(1)
 
+    df.to_parquet(filepath, index=False)
+    print(f"Saved {len(df)} candles to {filepath}")
+    return filepath
+
+
+def load_candle_data(instrument: CryptoPerpetual, filepath: Path) -> tuple[list[Bar], BarType]:
+    """Load candle data and convert to NautilusTrader Bar objects."""
     df = pd.read_parquet(filepath)
     print(f"Loaded {len(df)} bars from {filepath}")
     print(f"Time range: {df['timestamp'].min()} to {df['timestamp'].max()}")
     print(f"Price range: {df['close'].min():.2f} to {df['close'].max():.2f}")
 
     # Prepare DataFrame for BarDataWrangler
-    # Required columns: open, high, low, close, volume (with timestamp index)
     df = df.sort_values("timestamp")
     df = df.set_index("timestamp")
 
-    # Select OHLCV columns
     bar_df = df[["open", "high", "low", "close", "volume"]].copy()
     bar_df = bar_df.dropna()
 
@@ -93,9 +109,7 @@ def load_candle_data(instrument: CryptoPerpetual, source: str = "candles", inter
         bar_df.index = bar_df.index.tz_localize("UTC")
 
     # Create bar type
-    bar_type = BarType.from_str(
-        f"{instrument.id}-1-MINUTE-LAST-EXTERNAL"
-    )
+    bar_type = BarType.from_str(f"{instrument.id}-1-MINUTE-LAST-EXTERNAL")
 
     # Use BarDataWrangler to create Bar objects
     wrangler = BarDataWrangler(bar_type=bar_type, instrument=instrument)
@@ -109,21 +123,24 @@ def load_candle_data(instrument: CryptoPerpetual, source: str = "candles", inter
     return bars, bar_type
 
 
-def run_backtest(data_source: str = "trades", interval: str = "1min") -> None:
+def run_backtest(days: int = 30) -> None:
     """Run the Olympex strategy backtest."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
-    print("OLYMPEX ADAPTIVE STRATEGY — BACKTEST ON REAL BTC DATA")
+    print("OLYMPEX ADAPTIVE STRATEGY — BACKTEST ON REAL BTC DATA (HYPERLIQUID)")
     print("=" * 70)
 
     # Create instrument
-    instrument = create_btcusdt_instrument()
+    instrument = create_instrument()
     print(f"\nInstrument: {instrument.id}")
 
+    # Ensure data exists
+    filepath = ensure_data(days=days)
+
     # Load data
-    print(f"\nLoading data (source={data_source}, interval={interval})...")
-    bars, bar_type = load_candle_data(instrument, source=data_source, interval=interval)
+    print(f"\nLoading 1-min candle data...")
+    bars, bar_type = load_candle_data(instrument, filepath)
 
     if len(bars) < 100:
         print(f"WARNING: Only {len(bars)} bars. Need at least 100 for meaningful backtest.")
@@ -138,14 +155,14 @@ def run_backtest(data_source: str = "trades", interval: str = "1min") -> None:
         ),
     )
 
-    # Add venue
+    # Add venue — Hyperliquid settles in USDC
     HYPERLIQUID = Venue("HYPERLIQUID")
     engine.add_venue(
         venue=HYPERLIQUID,
         oms_type=OmsType.NETTING,
         account_type=AccountType.MARGIN,
         base_currency=None,
-        starting_balances=[Money(10_000, Currency.from_str("USDT"))],
+        starting_balances=[Money(10_000, Currency.from_str("USDC"))],
     )
 
     # Add instrument and data
@@ -216,9 +233,9 @@ def run_backtest(data_source: str = "trades", interval: str = "1min") -> None:
         analyze_results(positions_report)
 
     # Save results
-    results_file = RESULTS_DIR / f"backtest_{data_source}_{interval}.txt"
+    results_file = RESULTS_DIR / f"backtest_1min_{days}d.txt"
     with open(results_file, "w") as f:
-        f.write(f"Olympex Backtest Results — {data_source} {interval}\n")
+        f.write(f"Olympex Backtest Results — Real 1-min candles ({days} days)\n")
         f.write("=" * 50 + "\n")
         f.write(f"Bars: {len(bars)}\n")
         f.write(f"Trend entries: {strategy.stats['trend_entries']}\n")
@@ -238,7 +255,7 @@ def analyze_results(positions_df: pd.DataFrame) -> None:
         print("No realized PnL data available")
         return
 
-    # Parse PnL — may be string like "123.45 USDT"
+    # Parse PnL — may be string like "123.45 USDC"
     pnl_values = []
     for val in positions_df["realized_pnl"]:
         if isinstance(val, str):
@@ -276,30 +293,24 @@ def analyze_results(positions_df: pd.DataFrame) -> None:
     print(f"Total trades: {total_trades}")
     print(f"Win/Loss: {win_count}/{loss_count}")
     print(f"Win rate: {win_rate:.1f}%")
-    print(f"Total PnL: {total_pnl:.2f} USDT")
-    print(f"Gross profit: {gross_profit:.2f} USDT")
-    print(f"Gross loss: {gross_loss:.2f} USDT")
+    print(f"Total PnL: {total_pnl:.2f} USDC")
+    print(f"Gross profit: {gross_profit:.2f} USDC")
+    print(f"Gross loss: {gross_loss:.2f} USDC")
     print(f"Profit factor: {profit_factor:.2f}")
-    print(f"Max drawdown: {max_dd:.2f} USDT")
+    print(f"Max drawdown: {max_dd:.2f} USDC")
     if wins:
-        print(f"Avg win: {gross_profit / win_count:.2f} USDT")
+        print(f"Avg win: {gross_profit / win_count:.2f} USDC")
     if losses:
-        print(f"Avg loss: {gross_loss / loss_count:.2f} USDT")
+        print(f"Avg loss: {gross_loss / loss_count:.2f} USDC")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Olympex Backtest Runner")
     parser.add_argument(
-        "--data-source",
-        choices=["candles", "trades"],
-        default="trades",
-        help="Data source: 'candles' (exchange OHLCV) or 'trades' (derived from ticks)",
-    )
-    parser.add_argument(
-        "--interval",
-        choices=["1min", "5min"],
-        default="1min",
-        help="Bar interval (only for trades source)",
+        "--days",
+        type=int,
+        default=30,
+        help="Number of days of candle data to use (default: 30)",
     )
     args = parser.parse_args()
-    run_backtest(data_source=args.data_source, interval=args.interval)
+    run_backtest(days=args.days)
