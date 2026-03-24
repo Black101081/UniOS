@@ -16,7 +16,7 @@ LIMIT = 1000
 START_DATE = datetime(2023, 1, 1, tzinfo=timezone.utc)
 END_DATE = datetime(2026, 3, 24, 23, 59, 59, tzinfo=timezone.utc)
 OUTPUT_PATH = "/home/user/UniOS/olympex-nautilus/data/btc_binance_1min.parquet"
-ENDPOINT = "https://api.binance.com/api/v3/klines"
+ENDPOINT = "https://data-api.binance.vision/api/v3/klines"
 RATE_LIMIT_SLEEP = 0.5
 MAX_RETRIES = 3
 
