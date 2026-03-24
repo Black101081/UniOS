@@ -181,11 +181,10 @@ def run_backtest(days: int = 30) -> None:
         macd_fast=12,
         macd_slow=26,
         atr_period=14,
-        sl_atr_multiplier=1.5,
-        rr_ratio=2.0,
-        trailing_atr_multiplier=1.0,
-        max_holding_bars=60,
         position_size=0.01,
+        max_holding_bars=60,
+        trailing_atr_mult=1.0,
+        min_signal_strength=0.15,
     )
     strategy = OlympexStrategy(config=strategy_config)
     engine.add_strategy(strategy)
@@ -215,14 +214,24 @@ def run_backtest(days: int = 30) -> None:
 
     # Strategy stats
     print("\n--- Strategy Stats ---")
-    print(f"Gaps detected: {strategy.stats['gaps_detected']}")
-    print(f"Trend entries: {strategy.stats['trend_entries']}")
-    print(f"Mean reversion entries: {strategy.stats['mr_entries']}")
-    print(f"Total entries: {strategy.stats['trend_entries'] + strategy.stats['mr_entries']}")
-    print(f"Exits - TP: {strategy.stats['exits_tp']}")
-    print(f"Exits - SL: {strategy.stats['exits_sl']}")
-    print(f"Exits - Trailing: {strategy.stats['exits_trailing']}")
-    print(f"Exits - Timeout: {strategy.stats['exits_timeout']}")
+    s = strategy.stats
+    print(f"Gaps detected: {s['gaps_detected']}")
+    print(f"--- Regime Distribution ---")
+    for regime in ["trending", "ranging", "breakout", "squeeze", "volatile"]:
+        print(f"  {regime:12s}: {s.get(f'regime_{regime}', 0)} bars")
+    print(f"--- Entries by Type ---")
+    total_entries = 0
+    for t in ["trend", "mr", "breakout", "scalp", "fade"]:
+        count = s.get(f"{t}_entries", 0)
+        total_entries += count
+        print(f"  {t:12s}: {count}")
+    print(f"  {'total':12s}: {total_entries}")
+    print(f"  filtered:     {s.get('signals_filtered', 0)}")
+    print(f"--- Exits ---")
+    print(f"  TP:       {s['exits_tp']}")
+    print(f"  SL:       {s['exits_sl']}")
+    print(f"  Trailing: {s['exits_trailing']}")
+    print(f"  Timeout:  {s['exits_timeout']}")
 
     # Calculate additional metrics from positions
     positions_report = engine.trader.generate_positions_report()
