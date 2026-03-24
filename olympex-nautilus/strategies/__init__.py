@@ -1,2 +1,1 @@
-from .regime_detector import MarketRegimeDetector
 from .olympex_strategy import OlympexStrategy, OlympexStrategyConfig

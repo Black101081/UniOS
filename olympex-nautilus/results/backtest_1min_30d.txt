@@ -1,20 +1,20 @@
 Olympex Backtest Results — Real 1-min candles (30 days)
 ==================================================
 Bars: 12447
-Trend entries: 63
-MR entries: 391
+Trend entries: 95
+MR entries: 639
                                                          trader_id  ... is_snapshot
 position_id                                                         ...            
-BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-5c...  BACKTESTER-001  ...        True
-BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-92...  BACKTESTER-001  ...        True
-BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-ab...  BACKTESTER-001  ...        True
-BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-e7...  BACKTESTER-001  ...        True
-BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-ae...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-4b...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-77...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-a6...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-79...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-eb...  BACKTESTER-001  ...        True
 ...                                                            ...  ...         ...
-BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-f6...  BACKTESTER-001  ...        True
-BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-4d...  BACKTESTER-001  ...        True
-BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-41...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-1f...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-2b...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-9c...  BACKTESTER-001  ...        True
 BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-3b...  BACKTESTER-001  ...        True
 BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000        BACKTESTER-001  ...       False
 
-[454 rows x 21 columns]
+[734 rows x 21 columns]

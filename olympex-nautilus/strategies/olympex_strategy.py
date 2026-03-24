@@ -1,22 +1,25 @@
 """
-Olympex Adaptive Strategy for NautilusTrader.
+Olympex Adaptive Strategy v2 for NautilusTrader.
 
-Combines trend-following and mean-reversion approaches,
-automatically switching based on market regime detection.
+Designed for BTC 1-min candles from Hyperliquid.
+
+Key improvements over v1:
+- Uses bracket orders (entry + SL + TP submitted atomically)
+- Trend following as primary strategy (data shows 22-26 bar avg trends)
+- Tighter mean reversion filters (v1 overtrained, 28.6% win rate)
+- Gap detection — resets state on data gaps
+- ATR-based dynamic position exits
 
 Entry Logic:
-  - Trending market: EMA crossover + regime confirmation
-  - Ranging market: Bollinger Band bounce + RSI confirmation
+  TREND: EMA crossover confirmed by MACD direction and RSI momentum
+  MEAN REVERSION: BB extremes + RSI divergence (strict filter)
 
 Exit Logic:
-  - Take Profit: ATR × SL_multiplier × R:R ratio
-  - Stop Loss: ATR × SL_multiplier
-  - Trailing Stop: ATR × trailing_multiplier
-  - Timeout: max holding bars exceeded
-  - Regime Flip: exit trend trades when regime reverses
+  Bracket order handles SL/TP natively via stop-market and limit orders.
+  Strategy manages trailing stops and timeout exits.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 
 from nautilus_trader.config import StrategyConfig
@@ -38,17 +41,15 @@ from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.model.objects import Quantity
 from nautilus_trader.trading.strategy import Strategy
 
-from .regime_detector import MarketRegimeDetector, RegimeState
-
 
 class OlympexStrategyConfig(StrategyConfig, frozen=True):
-    """Configuration for OlympexStrategy."""
+    """Configuration for OlympexStrategy v2."""
 
     bar_type: str
     instrument_id: str
 
-    # EMA parameters
-    ema_fast_period: int = 10
+    # EMA
+    ema_fast_period: int = 9
     ema_slow_period: int = 21
 
     # RSI
@@ -66,24 +67,34 @@ class OlympexStrategyConfig(StrategyConfig, frozen=True):
     atr_period: int = 14
 
     # Risk management
-    sl_atr_multiplier: float = 2.0
-    rr_ratio: float = 3.0
-    trailing_atr_multiplier: float = 1.5
+    sl_atr_multiplier: float = 1.5     # tight SL — data shows avg win > avg loss
+    rr_ratio: float = 2.0             # TP = SL × 2.0
+    trailing_atr_multiplier: float = 1.0
 
     # Trade management
-    max_holding_bars: int = 100
-    confidence_threshold: float = 0.15
-    position_size: float = 0.01  # BTC quantity per trade
+    max_holding_bars: int = 60          # shorter than v1 (was 100)
+    position_size: float = 0.01        # BTC per trade
 
-    # Mean reversion thresholds (relaxed to fix no-trigger issue)
-    mr_rsi_buy_threshold: float = 40.0
-    mr_rsi_sell_threshold: float = 60.0
+    # Trend entry filters
+    trend_rsi_min: float = 40.0        # don't buy if RSI < 40 in uptrend (too weak)
+    trend_rsi_max: float = 60.0        # don't sell if RSI > 60 in downtrend
+
+    # Mean reversion filters (strict)
+    mr_bb_threshold: float = 0.10      # must be within 10% of band (was 20%)
+    mr_rsi_oversold: float = 30.0      # RSI < 30 for MR buy (was 40)
+    mr_rsi_overbought: float = 70.0    # RSI > 70 for MR sell (was 60)
+
+    # Gap detection
+    gap_seconds: int = 300             # 5 min gap = reset indicators
+
+    # Cooldown between trades (prevent overtrading)
+    min_bars_between_trades: int = 0   # 0 = no cooldown
 
 
 class OlympexStrategy(Strategy):
     """
-    Adaptive strategy that switches between trend-following
-    and mean-reversion based on market regime.
+    Adaptive BTC strategy v2 — trend following + selective mean reversion.
+    Uses bracket orders for proper SL/TP management.
     """
 
     def __init__(self, config: OlympexStrategyConfig) -> None:
@@ -105,18 +116,18 @@ class OlympexStrategy(Strategy):
         )
         self.atr = AverageTrueRange(config.atr_period)
 
-        # Regime detector
-        self.regime_detector = MarketRegimeDetector()
-
-        # State tracking
+        # State
         self._prev_ema_fast: float | None = None
         self._prev_ema_slow: float | None = None
-        self._entry_price: float | None = None
-        self._entry_side: OrderSide | None = None
-        self._entry_bar_count: int = 0
+        self._prev_macd: float | None = None
+        self._prev_bar_ts: int = 0          # nanoseconds
+        self._bars_since_entry: int = 0
         self._bar_count: int = 0
-        self._current_regime: RegimeState | None = None
-        self._entry_regime_trending: bool = False
+        self._warmup_bars: int = 0          # bars since last gap/start
+        self._entry_side: OrderSide | None = None
+        self._entry_price: float = 0.0
+        self._best_pnl: float = 0.0         # for trailing stop
+        self._bars_since_exit: int = 999     # cooldown counter
 
         # Stats
         self.stats = {
@@ -126,17 +137,15 @@ class OlympexStrategy(Strategy):
             "exits_sl": 0,
             "exits_trailing": 0,
             "exits_timeout": 0,
-            "exits_regime_flip": 0,
+            "gaps_detected": 0,
         }
 
     def on_start(self) -> None:
-        """Register indicators and subscribe to bar data."""
         self.instrument = self.cache.instrument(self.instrument_id)
         if self.instrument is None:
             self.log.error(f"Instrument {self.instrument_id} not found")
             return
 
-        # Register indicators for automatic updates
         self.register_indicator_for_bars(self.bar_type, self.ema_fast)
         self.register_indicator_for_bars(self.bar_type, self.ema_slow)
         self.register_indicator_for_bars(self.bar_type, self.rsi)
@@ -144,59 +153,43 @@ class OlympexStrategy(Strategy):
         self.register_indicator_for_bars(self.bar_type, self.macd)
         self.register_indicator_for_bars(self.bar_type, self.atr)
 
-        # Subscribe to bar data
         self.subscribe_bars(self.bar_type)
-        self.log.info("OlympexStrategy started")
+        self.log.info("OlympexStrategy v2 started")
 
     def on_bar(self, bar: Bar) -> None:
-        """Main strategy logic — called on each new bar."""
         self._bar_count += 1
 
-        # Wait for all indicators to be initialized
-        if not self._indicators_ready():
+        # Gap detection: if time between bars > threshold, reset warmup
+        bar_ts_ns = bar.ts_event
+        if self._prev_bar_ts > 0:
+            gap_seconds = (bar_ts_ns - self._prev_bar_ts) / 1_000_000_000
+            if gap_seconds > self.config.gap_seconds:
+                self._warmup_bars = 0
+                self.stats["gaps_detected"] += 1
+                self.log.info(f"Gap detected: {gap_seconds:.0f}s — resetting warmup")
+        self._prev_bar_ts = bar_ts_ns
+        self._warmup_bars += 1
+
+        # Need warmup for indicators + state
+        if not self._indicators_ready() or self._warmup_bars < self.config.ema_slow_period + 5:
+            self._update_prev_values()
             return
 
-        # Get current indicator values
         price = float(bar.close)
-        rsi_val = self.rsi.value
-        macd_val = self.macd.value
-        ema_fast_val = self.ema_fast.value
-        ema_slow_val = self.ema_slow.value
         atr_val = self.atr.value
-        bb_upper = self.bb.upper
-        bb_lower = self.bb.lower
-        bb_middle = self.bb.middle
-
-        # Compute regime
-        regime = self.regime_detector.compute(
-            rsi_value=rsi_val,
-            macd_value=macd_val,
-            bb_upper=bb_upper,
-            bb_lower=bb_lower,
-            bb_middle=bb_middle,
-            price=price,
-            ema_fast=ema_fast_val,
-            ema_slow=ema_slow_val,
-            atr_value=atr_val,
-        )
-        self._current_regime = regime
-
-        # Check position state
         is_flat = self.portfolio.is_flat(self.instrument_id)
 
         if not is_flat:
-            # Check exits
-            self._check_exits(price, atr_val, regime)
+            self._bars_since_entry += 1
+            self._manage_position(price, atr_val)
         else:
-            # Check entries
-            self._check_entries(price, rsi_val, ema_fast_val, ema_slow_val, bb_upper, bb_lower, atr_val, regime)
+            self._bars_since_exit += 1
+            if self._bars_since_exit >= self.config.min_bars_between_trades:
+                self._check_entries(price, atr_val)
 
-        # Update previous EMA values for crossover detection
-        self._prev_ema_fast = ema_fast_val
-        self._prev_ema_slow = ema_slow_val
+        self._update_prev_values()
 
     def _indicators_ready(self) -> bool:
-        """Check if all indicators are initialized."""
         return (
             self.ema_fast.initialized
             and self.ema_slow.initialized
@@ -206,194 +199,196 @@ class OlympexStrategy(Strategy):
             and self.atr.initialized
         )
 
-    def _check_entries(
-        self,
-        price: float,
-        rsi: float,
-        ema_fast: float,
-        ema_slow: float,
-        bb_upper: float,
-        bb_lower: float,
-        atr: float,
-        regime: RegimeState,
-    ) -> None:
-        """Check for trade entry signals."""
+    def _update_prev_values(self) -> None:
+        if self.ema_fast.initialized:
+            self._prev_ema_fast = self.ema_fast.value
+        if self.ema_slow.initialized:
+            self._prev_ema_slow = self.ema_slow.value
+        if self.macd.initialized:
+            self._prev_macd = self.macd.value
 
-        # Need previous EMA values for crossover detection
+    # -------------------------------------------------------------------------
+    # Entry Logic
+    # -------------------------------------------------------------------------
+    def _check_entries(self, price: float, atr: float) -> None:
         if self._prev_ema_fast is None or self._prev_ema_slow is None:
+            return
+        if atr <= 0:
             return
 
         config: OlympexStrategyConfig = self.config
+        ema_fast = self.ema_fast.value
+        ema_slow = self.ema_slow.value
+        rsi = self.rsi.value
+        macd = self.macd.value
+        bb_upper = self.bb.upper
+        bb_lower = self.bb.lower
 
-        # TREND FOLLOWING: EMA crossover + regime confirmation
-        if regime.is_trending:
-            # Bullish crossover: fast crosses above slow
-            bull_cross = (
-                self._prev_ema_fast <= self._prev_ema_slow and ema_fast > ema_slow
-            )
-            # Bearish crossover: fast crosses below slow
-            bear_cross = (
-                self._prev_ema_fast >= self._prev_ema_slow and ema_fast < ema_slow
-            )
+        # --- TREND FOLLOWING ---
+        # Bullish: EMA fast crosses above slow + MACD positive & rising + RSI confirms
+        bull_cross = self._prev_ema_fast <= self._prev_ema_slow and ema_fast > ema_slow
+        bear_cross = self._prev_ema_fast >= self._prev_ema_slow and ema_fast < ema_slow
+        macd_rising = self._prev_macd is not None and macd > self._prev_macd
+        macd_falling = self._prev_macd is not None and macd < self._prev_macd
 
-            if bull_cross and regime.total_score > 0:
-                self._enter_trade(OrderSide.BUY, price, atr, "TREND_BULL")
-                return
-            elif bear_cross and regime.total_score < 0:
-                self._enter_trade(OrderSide.SELL, price, atr, "TREND_BEAR")
-                return
+        if bull_cross and macd > 0 and rsi > config.trend_rsi_min:
+            self._enter_bracket(OrderSide.BUY, price, atr, "TREND_BULL")
+            return
 
-        # MEAN REVERSION: BB bounce OR RSI extreme (relaxed from AND to OR)
-        # Allow in ranging market OR weak trends (|score| < 2.0)
-        if not regime.is_trending:
-            bb_range = bb_upper - bb_lower
-            if bb_range > 0:
-                bb_percent = (price - bb_lower) / bb_range
+        if bear_cross and macd < 0 and rsi < config.trend_rsi_max:
+            self._enter_bracket(OrderSide.SELL, price, atr, "TREND_BEAR")
+            return
 
-                # Buy signal: price near lower band OR RSI oversold
-                buy_bb = bb_percent <= 0.20
-                buy_rsi = rsi < config.mr_rsi_buy_threshold
-                if buy_bb or buy_rsi:
-                    self._enter_trade(OrderSide.BUY, price, atr, "MR_BUY")
-                    return
+        # --- MEAN REVERSION (strict) ---
+        bb_range = bb_upper - bb_lower
+        if bb_range <= 0:
+            return
+        bb_pct = (price - bb_lower) / bb_range
 
-                # Sell signal: price near upper band OR RSI overbought
-                sell_bb = bb_percent >= 0.80
-                sell_rsi = rsi > config.mr_rsi_sell_threshold
-                if sell_bb or sell_rsi:
-                    self._enter_trade(OrderSide.SELL, price, atr, "MR_SELL")
-                    return
+        # Buy: price at lower BB + RSI oversold
+        if bb_pct <= config.mr_bb_threshold and rsi < config.mr_rsi_oversold:
+            self._enter_bracket(OrderSide.BUY, price, atr, "MR_BUY")
+            return
 
-    def _enter_trade(
-        self,
-        side: OrderSide,
-        price: float,
-        atr: float,
-        reason: str,
-    ) -> None:
-        """Submit a market order entry."""
+        # Sell: price at upper BB + RSI overbought
+        if bb_pct >= (1.0 - config.mr_bb_threshold) and rsi > config.mr_rsi_overbought:
+            self._enter_bracket(OrderSide.SELL, price, atr, "MR_SELL")
+            return
+
+    def _enter_bracket(self, side: OrderSide, price: float, atr: float, reason: str) -> None:
+        """Submit bracket order: market entry + stop-loss + take-profit."""
         config: OlympexStrategyConfig = self.config
+        sl_distance = atr * config.sl_atr_multiplier
+        tp_distance = sl_distance * config.rr_ratio
 
-        order = self.order_factory.market(
+        if side == OrderSide.BUY:
+            sl_price = price - sl_distance
+            tp_price = price + tp_distance
+        else:
+            sl_price = price + sl_distance
+            tp_price = price - tp_distance
+
+        # Clamp prices to instrument precision
+        sl_price_obj = self.instrument.make_price(sl_price)
+        tp_price_obj = self.instrument.make_price(tp_price)
+        qty = self.instrument.make_qty(config.position_size)
+
+        bracket = self.order_factory.bracket(
             instrument_id=self.instrument_id,
             order_side=side,
-            quantity=self.instrument.make_qty(config.position_size),
-            time_in_force=TimeInForce.GTC,
+            quantity=qty,
+            sl_trigger_price=sl_price_obj,
+            tp_price=tp_price_obj,
         )
-        self.submit_order(order)
+        self.submit_order_list(bracket)
 
-        # Track entry state
-        self._entry_price = price
+        # Track state
         self._entry_side = side
-        self._entry_bar_count = self._bar_count
-        self._entry_regime_trending = self._current_regime.is_trending if self._current_regime else False
+        self._entry_price = price
+        self._bars_since_entry = 0
+        self._best_pnl = 0.0
 
-        # Update stats
         if reason.startswith("TREND"):
             self.stats["trend_entries"] += 1
         else:
             self.stats["mr_entries"] += 1
 
-        self.log.info(f"ENTRY: {reason} | {side.name} @ {price:.2f} | ATR={atr:.2f} | Regime={self._current_regime.regime.value if self._current_regime else 'N/A'}")
+        self.log.info(
+            f"ENTRY: {reason} | {side.name} @ {price:.1f} | "
+            f"SL={float(sl_price_obj):.1f} TP={float(tp_price_obj):.1f} | ATR={atr:.1f}"
+        )
 
-    def _check_exits(self, price: float, atr: float, regime: RegimeState) -> None:
-        """Check exit conditions for open position."""
-        if self._entry_price is None or self._entry_side is None:
+    # -------------------------------------------------------------------------
+    # Position Management
+    # -------------------------------------------------------------------------
+    def _manage_position(self, price: float, atr: float) -> None:
+        """Check trailing stop and timeout exits. SL/TP are handled by bracket."""
+        if self._entry_side is None:
             return
 
         config: OlympexStrategyConfig = self.config
-        bars_held = self._bar_count - self._entry_bar_count
-        sl_distance = atr * config.sl_atr_multiplier
-        tp_distance = sl_distance * config.rr_ratio
 
+        # Calculate unrealized PnL
         if self._entry_side == OrderSide.BUY:
             pnl = price - self._entry_price
-            sl_hit = price <= self._entry_price - sl_distance
-            tp_hit = price >= self._entry_price + tp_distance
-
-            # Trailing stop (activate after 50% of TP reached)
-            trailing_distance = atr * config.trailing_atr_multiplier
-            # Simple trailing: if we've gained > trailing_distance, check if price dropped back
-            trailing_hit = (
-                pnl > trailing_distance and price < self._entry_price + pnl - trailing_distance
-            )
-        else:  # SELL
-            pnl = self._entry_price - price
-            sl_hit = price >= self._entry_price + sl_distance
-            tp_hit = price <= self._entry_price - tp_distance
-
-            trailing_distance = atr * config.trailing_atr_multiplier
-            trailing_hit = (
-                pnl > trailing_distance and price > self._entry_price - pnl + trailing_distance
-            )
-
-        # Regime flip: exit trend trades when regime reverses
-        regime_flip = False
-        if self._entry_regime_trending:
-            if self._entry_side == OrderSide.BUY and regime.total_score < -1.0:
-                regime_flip = True
-            elif self._entry_side == OrderSide.SELL and regime.total_score > 1.0:
-                regime_flip = True
-
-        # Timeout
-        timeout = bars_held >= config.max_holding_bars
-
-        # Exit logic — priority order
-        exit_reason = None
-        if sl_hit:
-            exit_reason = "STOP_LOSS"
-            self.stats["exits_sl"] += 1
-        elif tp_hit:
-            exit_reason = "TAKE_PROFIT"
-            self.stats["exits_tp"] += 1
-        elif trailing_hit:
-            exit_reason = "TRAILING_STOP"
-            self.stats["exits_trailing"] += 1
-        elif regime_flip:
-            exit_reason = "REGIME_FLIP"
-            self.stats["exits_regime_flip"] += 1
-        elif timeout:
-            exit_reason = "TIMEOUT"
-            self.stats["exits_timeout"] += 1
-
-        if exit_reason:
-            self._exit_trade(price, pnl, exit_reason)
-
-    def _exit_trade(self, price: float, pnl: float, reason: str) -> None:
-        """Close current position."""
-        if self._entry_side == OrderSide.BUY:
-            close_side = OrderSide.SELL
         else:
-            close_side = OrderSide.BUY
+            pnl = self._entry_price - price
 
-        config: OlympexStrategyConfig = self.config
-        order = self.order_factory.market(
-            instrument_id=self.instrument_id,
-            order_side=close_side,
-            quantity=self.instrument.make_qty(config.position_size),
-            time_in_force=TimeInForce.GTC,
-        )
-        self.submit_order(order)
+        # Track best PnL for trailing
+        if pnl > self._best_pnl:
+            self._best_pnl = pnl
 
-        self.log.info(f"EXIT: {reason} | {close_side.name} @ {price:.2f} | PnL={pnl:.2f}")
+        # Trailing stop: if we had a good run but price pulled back
+        trailing_distance = atr * config.trailing_atr_multiplier
+        if self._best_pnl > trailing_distance * 2 and (self._best_pnl - pnl) > trailing_distance:
+            self._close_and_cancel("TRAILING_STOP", price, pnl)
+            self.stats["exits_trailing"] += 1
+            return
 
-        # Reset state
-        self._entry_price = None
+        # Timeout: close if held too long
+        if self._bars_since_entry >= config.max_holding_bars:
+            self._close_and_cancel("TIMEOUT", price, pnl)
+            self.stats["exits_timeout"] += 1
+            return
+
+    def _close_and_cancel(self, reason: str, price: float, pnl: float) -> None:
+        """Close position and cancel any remaining bracket orders."""
+        # Cancel all open orders for this instrument (SL/TP from bracket)
+        self.cancel_all_orders(self.instrument_id)
+
+        # Close position
+        self.close_all_positions(self.instrument_id)
+
+        self.log.info(f"EXIT: {reason} @ {price:.1f} | PnL={pnl:.1f} | bars_held={self._bars_since_entry}")
+        self._reset_entry_state()
+
+    def _reset_entry_state(self) -> None:
         self._entry_side = None
-        self._entry_bar_count = 0
-        self._entry_regime_trending = False
+        self._entry_price = 0.0
+        self._bars_since_entry = 0
+        self._best_pnl = 0.0
+        self._bars_since_exit = 0
 
+    # -------------------------------------------------------------------------
+    # Order Events
+    # -------------------------------------------------------------------------
+    def on_order_filled(self, event) -> None:
+        """Track when SL or TP is hit by the bracket."""
+        order = self.cache.order(event.client_order_id)
+        if order is None:
+            return
+
+        # If this fill closes our position, record which exit type
+        if self.portfolio.is_flat(self.instrument_id):
+            tags = order.tags or ""
+            if "sl" in str(tags).lower() or order.order_type.name == "STOP_MARKET":
+                # Likely a stop-loss fill
+                if self._entry_side is not None:
+                    self.stats["exits_sl"] += 1
+                    self.log.info(f"EXIT: STOP_LOSS (bracket) @ {float(event.last_px):.1f}")
+            elif "tp" in str(tags).lower() or (order.order_type.name == "LIMIT" and order.is_reduce_only):
+                if self._entry_side is not None:
+                    self.stats["exits_tp"] += 1
+                    self.log.info(f"EXIT: TAKE_PROFIT (bracket) @ {float(event.last_px):.1f}")
+            else:
+                # Generic close (from close_all_positions or manual)
+                pass
+
+            self._reset_entry_state()
+
+    # -------------------------------------------------------------------------
+    # Lifecycle
+    # -------------------------------------------------------------------------
     def on_stop(self) -> None:
-        """Log strategy statistics on stop."""
         self.log.info("=" * 50)
-        self.log.info("OLYMPEX STRATEGY STATISTICS")
+        self.log.info("OLYMPEX STRATEGY v2 STATISTICS")
         self.log.info("=" * 50)
-        self.log.info(f"Total bars processed: {self._bar_count}")
+        self.log.info(f"Total bars: {self._bar_count}")
+        self.log.info(f"Gaps detected: {self.stats['gaps_detected']}")
         self.log.info(f"Trend entries: {self.stats['trend_entries']}")
-        self.log.info(f"Mean reversion entries: {self.stats['mr_entries']}")
+        self.log.info(f"MR entries: {self.stats['mr_entries']}")
         self.log.info(f"Exits - TP: {self.stats['exits_tp']}")
         self.log.info(f"Exits - SL: {self.stats['exits_sl']}")
         self.log.info(f"Exits - Trailing: {self.stats['exits_trailing']}")
         self.log.info(f"Exits - Timeout: {self.stats['exits_timeout']}")
-        self.log.info(f"Exits - Regime Flip: {self.stats['exits_regime_flip']}")
         self.log.info("=" * 50)

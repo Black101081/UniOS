@@ -173,7 +173,7 @@ def run_backtest(days: int = 30) -> None:
     strategy_config = OlympexStrategyConfig(
         bar_type=str(bar_type),
         instrument_id=str(instrument.id),
-        ema_fast_period=10,
+        ema_fast_period=9,
         ema_slow_period=21,
         rsi_period=14,
         bb_period=20,
@@ -181,14 +181,11 @@ def run_backtest(days: int = 30) -> None:
         macd_fast=12,
         macd_slow=26,
         atr_period=14,
-        sl_atr_multiplier=2.0,
-        rr_ratio=3.0,
-        trailing_atr_multiplier=1.5,
-        max_holding_bars=100,
-        confidence_threshold=0.15,
+        sl_atr_multiplier=1.5,
+        rr_ratio=2.0,
+        trailing_atr_multiplier=1.0,
+        max_holding_bars=60,
         position_size=0.01,
-        mr_rsi_buy_threshold=40.0,
-        mr_rsi_sell_threshold=60.0,
     )
     strategy = OlympexStrategy(config=strategy_config)
     engine.add_strategy(strategy)
@@ -218,6 +215,7 @@ def run_backtest(days: int = 30) -> None:
 
     # Strategy stats
     print("\n--- Strategy Stats ---")
+    print(f"Gaps detected: {strategy.stats['gaps_detected']}")
     print(f"Trend entries: {strategy.stats['trend_entries']}")
     print(f"Mean reversion entries: {strategy.stats['mr_entries']}")
     print(f"Total entries: {strategy.stats['trend_entries'] + strategy.stats['mr_entries']}")
@@ -225,7 +223,6 @@ def run_backtest(days: int = 30) -> None:
     print(f"Exits - SL: {strategy.stats['exits_sl']}")
     print(f"Exits - Trailing: {strategy.stats['exits_trailing']}")
     print(f"Exits - Timeout: {strategy.stats['exits_timeout']}")
-    print(f"Exits - Regime Flip: {strategy.stats['exits_regime_flip']}")
 
     # Calculate additional metrics from positions
     positions_report = engine.trader.generate_positions_report()
