@@ -1,235 +1,197 @@
-# Phase Space Plan: Thị trường như Hệ Vật Lý
+# Phase Space Plan: Roadmap Tổng Thể
 
-## Vấn đề hiện tại
-
-1. **Parameter-dependent**: Thay đổi EMA(9,21) → EMA(14,50) = kết quả hoàn toàn khác
-2. **Discrete labels**: 5 regime rời rạc (trending/ranging/breakout/squeeze/volatile) — thực tế thị trường là phổ liên tục
-3. **Indicator-based**: Đo indicator chứ không đo thị trường
-
-## Thiết kế mới: Phase Space Engine
-
-### Tầng 1: Statistical Properties (Không phụ thuộc tham số)
-
-Đo **thuộc tính nội tại** của phân phối returns:
-
-| Metric | Ý nghĩa | Cách tính |
-|--------|---------|-----------|
-| `realized_vol` | Biến động thực | std(returns) — không cần ATR period |
-| `skewness` | Lệch phân phối | Moment bậc 3 — thị trường thiên hướng lên/xuống |
-| `kurtosis` | Đuôi béo | Moment bậc 4 — xác suất extreme moves |
-| `autocorrelation` | Tự tương quan | returns[t] vs returns[t-1] — trend hay mean-revert |
-| `hurst` | Persistence | Rescaled range — bản chất trending/ranging |
-| `entropy` | Hỗn loạn | Shannon entropy của returns distribution |
-
-**Tại sao tốt hơn?** Đổi window size → giá trị thay đổi nhẹ, nhưng RANKING (high/low) giữ nguyên. Variance cao vẫn là variance cao dù đo trên 20 hay 50 bars.
-
-### Tầng 2: Multi-Scale Analysis (Robust)
-
-Tính MỖI metric trên NHIỀU scale rồi tổng hợp:
+## Tổng quan hệ thống mới
 
 ```
-scales = [5, 10, 20, 50, 100]  # bars
-
-Ví dụ volatility:
-  vol_5  = std(returns[-5:])
-  vol_10 = std(returns[-10:])
-  vol_20 = std(returns[-20:])
-  vol_50 = std(returns[-50:])
-  vol_100 = std(returns[-100:])
-
-  → volatility_score = weighted_percentile_rank(vol_multi_scale)
-  → volatility_trend = vol_short / vol_long  (tăng hay giảm?)
+OHLCV Data
+    │
+    ▼
+┌───────────────────┐
+│ MEASUREMENT ENGINE │  ← Phase 1 (MEASUREMENT_ENGINE.md)
+│ 6 metrics gốc     │
+│ 33-dim state vector│
+│ 4 regime membership│
+│ Transition scoring │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ EDGE DISCOVERY    │  ← Phase 2 (EDGE_DISCOVERY.md)
+│ Approach A: Data  │
+│ Approach B: Theory│
+│ A/B Test          │
+│ → Approach C: Mix │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ STRATEGY ENGINE   │  ← Phase 3 (future)
+│ Signal generation │
+│ Position sizing   │
+│ Risk management   │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ BACKTEST / LIVE   │  ← Phase 4 (future)
+│ NautilusTrader    │
+│ A/B comparison    │
+└───────────────────┘
 ```
 
-**Tại sao tốt hơn?** Không phụ thuộc vào BẤT KỲ period nào. Nếu volatility cao trên cả 5 scale → chắc chắn cao. Nếu chỉ cao trên scale ngắn → mới bắt đầu tăng.
+---
 
-### Tầng 3: Distribution-Based (Phase Detection)
+## Vấn đề với hệ thống CŨ
 
-Thay vì label "trending" hay "ranging", dùng **trạng thái phân phối**:
+| Vấn đề | Ví dụ | Ảnh hưởng |
+|---------|-------|-----------|
+| Parameter-dependent | EMA(9,21) vs EMA(14,50) = kết quả khác | Curve-fitting, không generalise |
+| Discrete labels | 5 regime rời rạc (trending/ranging/...) | Thị trường là phổ liên tục |
+| Indicator-based | RSI, MACD, ADX = biến đổi giá với magic number | Đo indicator, không đo thị trường |
+| Không có dynamics | Chỉ biết "đang ở đâu", không biết "đang đi đâu" | Bỏ lỡ chuyển pha |
+| Không có edge validation | Trade dựa trên indicator cross = không rõ có edge thật không | Không biết lý do thắng/thua |
 
-- **Regime A** (trending): returns có mean ≠ 0, autocorrelation > 0, Hurst > 0.5
-- **Regime B** (ranging): returns có mean ≈ 0, autocorrelation < 0, Hurst < 0.5
-- **Regime C** (volatile): returns có kurtosis cao, variance cao, entropy cao
+## Thiết kế mới: Từ gốc đến ngọn
 
-Nhưng thay vì chọn A/B/C, output là **vector xác suất liên tục**: `[0.6, 0.3, 0.1]`
+### Phase 1: Measurement Engine
 
-## Output: PhaseState
+**Tài liệu**: `MEASUREMENT_ENGINE.md`
 
-```python
-@dataclass
-class PhaseState:
-    """Trạng thái trong không gian pha liên tục."""
+**Nguyên lý**: Chỉ dùng thuộc tính thống kê nội tại — những thứ thật sự đo được.
 
-    # === POSITION (Vị trí hiện tại trên phổ liên tục) ===
-    # Mỗi trục là 0-1, KHÔNG phải label
-    volatility: float       # 0=rất yên tĩnh, 1=rất biến động
-    trend: float            # -1=downtrend mạnh, 0=sideway, +1=uptrend mạnh
-    mean_reversion: float   # 0=không có, 1=mean-reversion rõ ràng
-    momentum: float         # -1=bearish cực, 0=trung tính, +1=bullish cực
-    liquidity: float        # 0=thanh khoản thấp, 1=thanh khoản cao
+| Component | Input | Output |
+|-----------|-------|--------|
+| 6 Metric Gốc | OHLCV | vol, autocorr, skew, kurtosis, vol_anomaly, pv_corr |
+| Multi-Scale | Mỗi metric × 5 windows | Consensus score (robust) |
+| State Vector | 6 metrics × history | 33 chiều (vị trí + vận tốc + gia tốc + tương quan) |
+| Regime Membership | 6 metrics | 4 regime weights (tổng = 1) |
+| Transition Score | Membership history | Score 0-100 cho mỗi chuyển pha |
 
-    # === VELOCITY (Tốc độ chuyển pha) ===
-    d_volatility: float     # volatility đang tăng (+) hay giảm (-)
-    d_trend: float          # trend đang mạnh lên (+) hay yếu đi (-)
-    d_mean_reversion: float
-    d_momentum: float
-    d_liquidity: float
-
-    # === ACCELERATION (Gia tốc chuyển pha) ===
-    dd_volatility: float    # tốc độ thay đổi volatility đang tăng hay giảm
-    dd_trend: float
-    dd_momentum: float
-
-    # === FORCE & INERTIA ===
-    inertia: float          # 0-1, trạng thái hiện tại ổn định đến mức nào
-    net_force: float        # -1 to +1, lực ròng đang đẩy thị trường
-    force_alignment: float  # Các lực cùng hướng (1) hay trái hướng (0)?
-
-    # === ANOMALY ===
-    whale_score: float      # 0=bình thường, 1=hoạt động bất thường
-    regime_break: float     # 0=ổn định, 1=đang phá vỡ regime
-
-    # === STRATEGY SCORES (derived) ===
-    trend_suitability: float
-    mr_suitability: float
-    breakout_suitability: float
-    scalp_suitability: float
-    fade_suitability: float
-
-    # Meta
-    confidence: float       # Tổng confidence (dựa trên data sufficiency)
-    bars_processed: int
-```
-
-## Cách tính cụ thể
-
-### Position: Multi-scale Statistical
-
-```python
-def compute_volatility(returns, volumes):
-    """Volatility score 0-1 dựa trên statistical properties."""
-    scores = []
-    for scale in [5, 10, 20, 50, 100]:
-        if len(returns) >= scale:
-            window = returns[-scale:]
-            scores.append(np.std(window))
-
-    # Percentile rank trong lịch sử
-    current = np.mean(scores)  # average across scales
-    return percentile_rank(current, vol_history)
-```
-
-### Velocity: Finite Difference
-
-```python
-def compute_velocity(position_history):
-    """d(position)/dt — rate of phase change."""
-    if len(position_history) < 2:
-        return 0.0
-    return position_history[-1] - position_history[-2]
-```
-
-### Acceleration
-
-```python
-def compute_acceleration(velocity_history):
-    """d²(position)/dt² — is transition speeding up?"""
-    if len(velocity_history) < 2:
-        return 0.0
-    return velocity_history[-1] - velocity_history[-2]
-```
-
-### Inertia (Resistance to change)
-
-```python
-def compute_inertia(position_history, window=20):
-    """How stable is the current state? Low variance = high inertia."""
-    if len(position_history) < window:
-        return 0.5
-    recent = position_history[-window:]
-    stability = 1.0 - min(np.std(recent) * 10, 1.0)
-    return stability
-```
-
-### Whale Detection
-
-```python
-def compute_whale_score(volume, returns, vol_history, return_history):
-    """Detect anomalous activity."""
-    vol_zscore = (volume - np.mean(vol_history)) / np.std(vol_history)
-    ret_zscore = abs(returns[-1]) / np.std(return_history)
-
-    # Z-score > 3 = anomaly
-    whale = max(0, min(1, (max(vol_zscore, ret_zscore) - 2) / 3))
-    return whale
-```
-
-### Strategy Suitability (Derived from phase position)
-
-```python
-def compute_strategy_scores(phase: PhaseState):
-    """Strategy scores derived from continuous phase, not labels."""
-
-    # Trend following: high trend + high momentum alignment + not mean-reverting
-    trend_suit = (
-        abs(phase.trend) * 0.4 +
-        abs(phase.momentum) * 0.3 +
-        (1 - phase.mean_reversion) * 0.2 +
-        phase.liquidity * 0.1
-    ) * (1 if phase.trend * phase.momentum > 0 else 0.3)  # alignment bonus
-
-    # Mean reversion: high mean_reversion + low trend + moderate volatility
-    mr_suit = (
-        phase.mean_reversion * 0.5 +
-        (1 - abs(phase.trend)) * 0.3 +
-        (0.3 < phase.volatility < 0.7) * 0.2
-    )
-
-    # Breakout: volatility increasing + high momentum + high volume
-    breakout_suit = (
-        max(0, phase.d_volatility) * 0.3 +
-        abs(phase.momentum) * 0.3 +
-        phase.liquidity * 0.2 +
-        phase.regime_break * 0.2
-    )
-
-    # Scalp: high volatility + no clear trend + good liquidity
-    scalp_suit = (
-        phase.volatility * 0.4 +
-        (1 - abs(phase.trend)) * 0.3 +
-        phase.liquidity * 0.3
-    )
-
-    # Fade: extreme momentum + high volatility + mean-reversion tendency
-    fade_suit = (
-        (abs(phase.momentum) > 0.7) * 0.4 +
-        phase.volatility * 0.3 +
-        phase.mean_reversion * 0.3
-    )
-```
-
-## File structure
-
+**Files**:
 ```
 strategies/
-├── phase_space.py          # NEW: PhaseState + PhaseSpaceEngine
-├── market_measure.py       # KEEP (backward compat, but deprecated)
-├── regime_classifier.py    # KEEP (backward compat, but deprecated)
-├── olympex_strategy.py     # UPDATE: use PhaseSpaceEngine
-├── strategy_modules.py     # UPDATE: accept PhaseState instead of RegimeSignal
-└── __init__.py
+├── stat_metrics.py        # 6 metric gốc + multi-scale
+├── state_vector.py        # 33-dim: position + velocity + accel + cross-corr
+└── regime_membership.py   # 4 regime weights + transition scoring
 ```
 
-## Implementation Steps
+**Tests**:
+```
+tests/
+├── test_metrics.py        # Unit test từng metric
+├── test_robustness.py     # Window stability (ranking nhất quán >= 85%)
+├── test_regime_synthetic.py # Classify đúng trên synthetic data
+├── test_transitions.py    # Phát hiện chuyển pha đúng vị trí
+├── test_dynamics.py       # Velocity/acceleration/cross-corr
+├── test_real_data.py      # No NaN, valid range trên BTC thật
+├── test_benchmark.py      # So sánh vs hệ thống cũ
+└── conftest.py            # Synthetic data generators
+```
 
-1. Create `phase_space.py` with PhaseState and PhaseSpaceEngine
-2. PhaseSpaceEngine computes all statistical properties + multi-scale + derivatives
-3. Update `olympex_strategy.py` to use PhaseSpaceEngine alongside (not replacing) existing system
-4. Update strategy modules to accept PhaseState for signal gating
-5. Keep old system for A/B comparison in backtest
+**Pass criteria**: 9 tiêu chí trong MEASUREMENT_ENGINE.md section 6.
 
-## Câu hỏi mở
+### Phase 2: Edge Discovery
 
-- Whale detection chỉ PHÁT HIỆN được, không DỰ ĐOÁN được. Đây là giới hạn của bất kỳ hệ thống nào.
-- "Lực cần thiết để chuyển pha" = inertia. Đo bằng stability của phase position qua thời gian.
-- Phase transition speed = velocity. Nếu velocity cao + acceleration dương → thị trường đang chuyển pha nhanh.
+**Tài liệu**: `EDGE_DISCOVERY.md`
+
+**Prerequisite**: Phase 1 pass tất cả test.
+
+| Approach | Phương pháp | Rủi ro | Điểm mạnh |
+|----------|-------------|--------|------------|
+| A (Data-Driven) | Scan 33 chiều → tìm vùng hit_rate ≠ 50% | Overfitting | Tìm được edge không ngờ |
+| B (Theory-Driven) | 5 giả thuyết regime/transition → signals | Miss edge | Stable, ít overfit |
+| C (Combined) | B lọc + A tinh chỉnh | Ít signals | Chất lượng cao nhất |
+
+**Files**:
+```
+strategies/
+├── edge_scanner.py        # Approach A
+├── theory_signals.py      # Approach B (5 giả thuyết)
+└── signal_combiner.py     # Approach C
+
+scripts/
+├── run_edge_discovery.py  # Chạy A offline → báo cáo
+└── run_ab_test.py         # So sánh A vs B vs C
+
+tests/
+├── test_edge_scanner.py
+├── test_theory_signals.py
+└── test_ab_comparison.py
+```
+
+### Phase 3: Strategy Engine (future)
+
+Sau khi Edge Discovery cho ra signal generator thắng cuộc:
+
+- Tích hợp vào NautilusTrader strategy
+- Position sizing dựa trên regime + signal strength
+- Risk management: CHAOS filter, max drawdown, correlation-based sizing
+- Chạy song song với strategy cũ để A/B test
+
+### Phase 4: Backtest & Live (future)
+
+- Full backtest trên NautilusTrader
+- So sánh: strategy mới vs strategy cũ vs buy-and-hold
+- Paper trading trước live
+- Gradual rollout
+
+---
+
+## Thứ tự thực hiện chi tiết
+
+### Phase 1A: Foundation (Metric Engine)
+1. `stat_metrics.py` — 6 metric gốc + multi-scale
+2. `tests/test_metrics.py` — unit test
+3. Run tests → fix → pass
+
+### Phase 1B: State Vector
+4. `state_vector.py` — velocity, acceleration, cross-correlation
+5. `tests/test_dynamics.py` — test dynamics
+6. Run tests → fix → pass
+
+### Phase 1C: Regime
+7. `regime_membership.py` — membership + transition scoring
+8. `tests/conftest.py` — synthetic data generators
+9. `tests/test_regime_synthetic.py` + `tests/test_transitions.py`
+10. Run tests → fix → pass
+
+### Phase 1D: Validation
+11. `tests/test_robustness.py` — window stability
+12. `tests/test_real_data.py` — BTC real data
+13. `tests/test_benchmark.py` — vs hệ thống cũ
+14. Run all → pass criteria check
+
+### Phase 2A: Approach A (Data-Driven)
+15. `edge_scanner.py`
+16. `run_edge_discovery.py` → scan BTC data → report
+17. `tests/test_edge_scanner.py` → out-of-sample validation
+
+### Phase 2B: Approach B (Theory-Driven)
+18. `theory_signals.py` — 5 giả thuyết
+19. `tests/test_theory_signals.py` — test từng giả thuyết
+20. Keep passing hypotheses, drop failing ones
+
+### Phase 2C: A/B Test
+21. `run_ab_test.py` → A vs B trên cùng data
+22. Compare all metrics
+23. If C wins → `signal_combiner.py`
+
+### Phase 3: Strategy Integration
+24. Winner signal generator → `olympex_strategy.py`
+25. Full NautilusTrader backtest
+26. Compare vs old strategy
+
+---
+
+## Giữ gì từ hệ thống cũ
+
+| File | Hành động | Lý do |
+|------|-----------|-------|
+| `market_measure.py` | **GIỮ NGUYÊN** | Backward compat + benchmark baseline |
+| `regime_classifier.py` | **GIỮ NGUYÊN** | Benchmark baseline |
+| `regime_detector.py` | **GIỮ NGUYÊN** | Benchmark baseline |
+| `strategy_modules.py` | **GIỮ NGUYÊN** | Có thể tái sử dụng logic entry |
+| `olympex_strategy.py` | **SỬA SAU** (Phase 3) | Thêm integration mới |
+| `run_backtest.py` | **SỬA SAU** (Phase 3) | Thêm A/B test mode |
+
+**Nguyên tắc**: Không xoá, không sửa cái cũ cho đến khi cái mới CHỨNG MINH tốt hơn.
