@@ -202,14 +202,14 @@ p_va  = plot(va_score,   "VolAnom %", color=color.new(color.teal, 30),   linewid
 p_pv  = plot(pv_score,   "PVCorr %",  color=color.new(color.gray, 30),   linewidth=1)
 
 // Fill giữa average và midline 50 — cho thấy bias tổng thể
-h50 = hline(50, "Midline",          color=color.new(color.gray, 80),  linestyle=hline.style_dotted)
-fill(p_avg, h50,
+p_mid = plot(50, "Midline", color=color.new(color.gray, 80), linewidth=1, style=plot.style_circles)
+fill(p_avg, p_mid,
      color=avg_smooth > 50 ? color.new(color.red, 90) : color.new(color.green, 90),
      title="AVG vs Midline Fill")
 
 // Reference lines
-h20 = hline(20, "Quiet Threshold",  color=color.new(color.green, 70), linestyle=hline.style_dotted)
-h80 = hline(80, "Chaos Threshold",  color=color.new(color.red, 70),   linestyle=hline.style_dotted)
+hline(20, "Quiet Threshold",  color=color.new(color.green, 70), linestyle=hline.style_dotted)
+hline(80, "Chaos Threshold",  color=color.new(color.red, 70),   linestyle=hline.style_dotted)
 
 // ──────────────────────────────────────────────
 // ZONE BACKGROUND COLORS
