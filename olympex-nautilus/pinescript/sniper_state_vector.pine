@@ -185,8 +185,15 @@ chaos_score = (vol_score + ku_score) / 2.0
 decouple_score = 100 - (xc_sp_pct + xc_va_pct) / 2.0
 
 // ──────────────────────────────────────────────
-// PLOTS — Panel 1: 6 Metrics (percentile)
+// AVERAGE LINE (trung bình 6 metrics)
 // ──────────────────────────────────────────────
+avg_score = (vol_score + ac_score + sk_score + ku_score + va_score + pv_score) / 6.0
+avg_smooth = ta.ema(avg_score, 5)   // EMA(5) để mượt hơn
+
+// ──────────────────────────────────────────────
+// PLOTS — Panel 1: 6 Metrics (percentile) + Average
+// ──────────────────────────────────────────────
+p_avg = plot(avg_smooth, "AVG (6 metrics)", color=color.new(color.white, 0), linewidth=3)
 p_vol = plot(vol_score,  "Vol %",     color=color.new(color.red, 30),    linewidth=2)
 p_ac  = plot(ac_score,   "AutoCorr %", color=color.new(color.blue, 30),   linewidth=1)
 p_sk  = plot(sk_score,   "Skew %",    color=color.new(color.orange, 30), linewidth=1)
@@ -194,10 +201,15 @@ p_ku  = plot(ku_score,   "Kurt %",    color=color.new(color.purple, 30), linewid
 p_va  = plot(va_score,   "VolAnom %", color=color.new(color.teal, 30),   linewidth=1)
 p_pv  = plot(pv_score,   "PVCorr %",  color=color.new(color.gray, 30),   linewidth=1)
 
+// Fill giữa average và midline 50 — cho thấy bias tổng thể
+h50 = hline(50, "Midline",          color=color.new(color.gray, 80),  linestyle=hline.style_dotted)
+fill(p_avg, h50,
+     color=avg_smooth > 50 ? color.new(color.red, 90) : color.new(color.green, 90),
+     title="AVG vs Midline Fill")
+
 // Reference lines
 h20 = hline(20, "Quiet Threshold",  color=color.new(color.green, 70), linestyle=hline.style_dotted)
 h80 = hline(80, "Chaos Threshold",  color=color.new(color.red, 70),   linestyle=hline.style_dotted)
-h50 = hline(50, "Midline",          color=color.new(color.gray, 80),  linestyle=hline.style_dotted)
 
 // ──────────────────────────────────────────────
 // ZONE BACKGROUND COLORS
@@ -251,7 +263,7 @@ if barstate.islast and zone > 0
 // ──────────────────────────────────────────────
 // TABLE: State Vector Dashboard
 // ──────────────────────────────────────────────
-var table dash = table.new(position.top_right, 4, 10,
+var table dash = table.new(position.top_right, 4, 11,
      bgcolor=color.new(color.black, 20),
      border_width=1, border_color=color.new(color.gray, 50))
 
@@ -305,13 +317,22 @@ if barstate.islast
     table.cell(dash, 2, 7, str.tostring(xc_vol_ac, "#.###"), text_color=color.white, text_size=size.tiny)
     table.cell(dash, 3, 7, str.tostring(xc_va_pct, "#.0") + "%", text_color=color.white, text_size=size.tiny)
 
+    // AVG row
+    table.cell(dash, 0, 8, "AVG",      text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 8, "6 metrics", text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 2, 8, str.tostring(avg_smooth, "#.0"),
+         text_color=color.white, text_size=size.small)
+    table.cell(dash, 3, 8, avg_smooth < 35 ? "QUIET" : avg_smooth > 65 ? "HOT" : "NORMAL",
+         text_color=avg_smooth < 35 ? color.lime : avg_smooth > 65 ? color.red : color.yellow,
+         text_size=size.small)
+
     // Zone
-    table.cell(dash, 0, 8, "ZONE",     text_color=color.white, text_size=size.small)
-    table.cell(dash, 1, 8, zoneText != "" ? zoneText : "—",
+    table.cell(dash, 0, 9, "ZONE",     text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 9, zoneText != "" ? zoneText : "—",
          text_color=zone <= 4 ? color.lime : zone > 4 ? color.red : color.gray,
          text_size=size.normal)
-    table.cell(dash, 2, 8, "DIR",       text_color=color.white, text_size=size.small)
-    table.cell(dash, 3, 8, dir_long ? "LONG ▲" : dir_short ? "SHORT ▼" : "NEUTRAL",
+    table.cell(dash, 2, 9, "DIR",       text_color=color.white, text_size=size.small)
+    table.cell(dash, 3, 9, dir_long ? "LONG ▲" : dir_short ? "SHORT ▼" : "NEUTRAL",
          text_color=dir_long ? color.lime : dir_short ? color.red : color.gray,
          text_size=size.small)
 
