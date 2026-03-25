@@ -10,3 +10,4 @@ from .strategy_modules import (
     TradeSignal,
     SignalType,
 )
+from .sniper_strategy import SniperStrategy, SniperStrategyConfig

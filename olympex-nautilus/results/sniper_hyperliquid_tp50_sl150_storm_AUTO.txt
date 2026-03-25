@@ -1,0 +1,52 @@
+Sniper 33-dim Backtest — hyperliquid data
+============================================================
+Config: TP=$50.0 SL=$150.0 condition=storm direction=AUTO
+Bars: 12,447
+Position size: 0.01 BTC
+
+Strategy Stats:
+  total_bars: 12447
+  states_computed: 12216
+  conditions_triggered: 71
+  entries_long: 44
+  entries_short: 27
+  exits_tp: 52
+  exits_sl: 18
+  exits_timeout: 1
+  exits_gap: 0
+  total_pnl: -90.0
+  wins: 53
+  losses: 18
+  gaps_detected: 9
+
+Performance Metrics:
+  total_trades: 71
+  wins: 53
+  losses: 18
+  win_rate: 74.64788732394366
+  total_pnl: -0.8999999999999999
+  avg_pnl: -0.012676056338028168
+  gross_profit: 26.1
+  gross_loss: 27.0
+  profit_factor: 0.9666666666666667
+  avg_win: 0.49245283018867925
+  avg_loss: 1.5
+  max_drawdown: -9.9
+  sharpe: -0.12304708655505942
+
+Positions Report:
+                                                         trader_id  ... is_snapshot
+position_id                                                         ...            
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000-8c8...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000-5ff...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000-f5d...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000-a24...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000-b18...  BACKTESTER-001  ...        True
+...                                                            ...  ...         ...
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000-c00...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000-a0f...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000-215...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000-cd7...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-SniperStrategy-000         BACKTESTER-001  ...       False
+
+[71 rows x 21 columns]
