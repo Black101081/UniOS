@@ -1,0 +1,20 @@
+Olympex Backtest Results — Real 1-min candles (30 days)
+==================================================
+Bars: 12447
+Trend entries: 0
+MR entries: 432
+                                                         trader_id  ... is_snapshot
+position_id                                                         ...            
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-3f...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-66...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-49...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-26...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-1c...  BACKTESTER-001  ...        True
+...                                                            ...  ...         ...
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-0b...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-71...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-09...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000-20...  BACKTESTER-001  ...        True
+BTC-USD-PERP.HYPERLIQUID-OlympexStrategy-000        BACKTESTER-001  ...       False
+
+[649 rows x 21 columns]

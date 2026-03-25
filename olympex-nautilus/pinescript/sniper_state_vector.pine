@@ -1,0 +1,346 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
+// https://mozilla.org/MPL/2.0/
+// © Olympex Nautilus — Sniper 33-Dim State Vector Indicator
+
+//@version=6
+indicator("Sniper State Vector [33D]", shorttitle="SSV33", overlay=false, precision=4,
+     max_bars_back=500, max_lines_count=500, max_labels_count=500)
+
+// ──────────────────────────────────────────────
+// INPUTS
+// ──────────────────────────────────────────────
+grp_ms   = "Multi-Scale Consensus"
+s1       = input.int(5,   "Scale 1", group=grp_ms, minval=2)
+s2       = input.int(10,  "Scale 2", group=grp_ms, minval=2)
+s3       = input.int(20,  "Scale 3", group=grp_ms, minval=2)
+s4       = input.int(50,  "Scale 4", group=grp_ms, minval=2)
+s5       = input.int(100, "Scale 5", group=grp_ms, minval=2)
+pctLen   = input.int(200, "Percentile Lookback", group=grp_ms, minval=50)
+
+grp_disp = "Display"
+showZone = input.bool(true, "Show Zone Background", group=grp_disp)
+showDir  = input.bool(true, "Show Direction Arrows", group=grp_disp)
+
+// ──────────────────────────────────────────────
+// HELPER: log returns
+// ──────────────────────────────────────────────
+ret = math.log(close / close[1])
+
+// ──────────────────────────────────────────────
+// METRIC 1: VOLATILITY (std dev of returns)
+// ──────────────────────────────────────────────
+vol_at(int n) =>
+    ta.stdev(ret, n)
+
+vol_ms = (vol_at(s1) + vol_at(s2) + vol_at(s3) + vol_at(s4) + vol_at(s5)) / 5.0
+
+// ──────────────────────────────────────────────
+// METRIC 2: AUTOCORRELATION (lag-1)
+// ──────────────────────────────────────────────
+ac_at(int n) =>
+    ta.correlation(ret, ret[1], n)
+
+ac_ms = (ac_at(s1) + ac_at(s2) + ac_at(s3) + ac_at(s4) + ac_at(s5)) / 5.0
+
+// ──────────────────────────────────────────────
+// METRIC 3: SKEWNESS (3rd moment)
+// ──────────────────────────────────────────────
+skew_at(int n) =>
+    float m   = ta.sma(ret, n)
+    float sd  = ta.stdev(ret, n)
+    float sum = 0.0
+    if sd > 1e-12
+        for i = 0 to n - 1
+            z = (ret[i] - m) / sd
+            sum += z * z * z
+        sum / n
+    else
+        0.0
+
+sk_ms = (skew_at(s1) + skew_at(s2) + skew_at(s3) + skew_at(s4) + skew_at(s5)) / 5.0
+
+// ──────────────────────────────────────────────
+// METRIC 4: KURTOSIS (4th moment)
+// ──────────────────────────────────────────────
+kurt_at(int n) =>
+    float m   = ta.sma(ret, n)
+    float sd  = ta.stdev(ret, n)
+    float sum = 0.0
+    if sd > 1e-12
+        for i = 0 to n - 1
+            z = (ret[i] - m) / sd
+            sum += z * z * z * z
+        sum / n
+    else
+        0.0
+
+ku_ms = (kurt_at(s1) + kurt_at(s2) + kurt_at(s3) + kurt_at(s4) + kurt_at(s5)) / 5.0
+
+// ──────────────────────────────────────────────
+// METRIC 5: VOLUME ANOMALY (current / median)
+// ──────────────────────────────────────────────
+va_at(int n) =>
+    float med = ta.median(volume, n)
+    med > 0 ? volume / med : 1.0
+
+va_ms = (va_at(s1) + va_at(s2) + va_at(s3) + va_at(s4) + va_at(s5)) / 5.0
+
+// ──────────────────────────────────────────────
+// METRIC 6: PRICE-VOLUME CORRELATION
+// ──────────────────────────────────────────────
+abs_ret = math.abs(ret)
+
+pv_at(int n) =>
+    ta.correlation(abs_ret, volume, n)
+
+pv_ms = (pv_at(s1) + pv_at(s2) + pv_at(s3) + pv_at(s4) + pv_at(s5)) / 5.0
+
+// ──────────────────────────────────────────────
+// LAYER 1: VELOCITY (1st derivative)
+// ──────────────────────────────────────────────
+d_vol     = vol_ms - vol_ms[1]
+d_ac      = ac_ms  - ac_ms[1]
+d_sk      = sk_ms  - sk_ms[1]
+d_ku      = ku_ms  - ku_ms[1]
+d_va      = va_ms  - va_ms[1]
+d_pv      = pv_ms  - pv_ms[1]
+
+// ──────────────────────────────────────────────
+// LAYER 2: ACCELERATION (2nd derivative)
+// ──────────────────────────────────────────────
+dd_vol    = d_vol - d_vol[1]
+dd_ac     = d_ac  - d_ac[1]
+dd_sk     = d_sk  - d_sk[1]
+dd_ku     = d_ku  - d_ku[1]
+dd_va     = d_va  - d_va[1]
+dd_pv     = d_pv  - d_pv[1]
+
+// ──────────────────────────────────────────────
+// LAYER 3: KEY CROSS-CORRELATIONS (velocity corr over 20 bars)
+// ──────────────────────────────────────────────
+xc_vol_ac    = ta.correlation(d_vol, d_ac,  20)   // vol ↔ autocorr
+xc_sk_pv     = ta.correlation(d_sk,  d_pv,  20)   // skew ↔ pv_corr  (key for S1/S2)
+xc_vol_va    = ta.correlation(d_vol, d_va,  20)   // vol ↔ vol_anom
+xc_ac_sk     = ta.correlation(d_ac,  d_sk,  20)   // autocorr ↔ skew
+
+// ──────────────────────────────────────────────
+// PERCENTILE FUNCTION (rank-based)
+// ──────────────────────────────────────────────
+pct_rank(float src, int len) =>
+    float cnt = 0.0
+    for i = 1 to len
+        if src >= src[i]
+            cnt += 1
+    cnt / len * 100.0
+
+// ──────────────────────────────────────────────
+// PERCENTILE RANKS FOR ZONE CLASSIFICATION
+// ──────────────────────────────────────────────
+vol_pct    = pct_rank(vol_ms,   pctLen)
+kurt_pct   = pct_rank(ku_ms,    pctLen)
+xc_sp_pct  = pct_rank(xc_sk_pv, pctLen)
+xc_va_pct  = pct_rank(xc_vol_ac, pctLen)
+
+// ──────────────────────────────────────────────
+// ZONE CLASSIFICATION (S1–S6)
+// ──────────────────────────────────────────────
+// Quiet zones — sniper entry
+is_S1 = vol_pct <= 5  and xc_sp_pct <= 10    // Ultra quiet + decoupling
+is_S2 = vol_pct <= 10 and xc_sp_pct <= 15    // Quiet storm
+is_S3 = vol_pct <= 10 and xc_va_pct <= 25    // Quiet + vol-autocorr decouple
+is_S4 = vol_pct <= 15                         // Just quiet
+
+// Chaos zones — dual entry
+is_S5 = d_vol > 0 and vol_pct >= 80           // Vol accelerating
+is_S6 = vol_pct >= 90 and kurt_pct >= 80       // Chaos: extreme vol + fat tails
+
+// Composite zone number (priority: S1 > S2 > S3 > S6 > S5 > S4 > 0)
+zone = is_S1 ? 1 : is_S2 ? 2 : is_S3 ? 3 : is_S6 ? 6 : is_S5 ? 5 : is_S4 ? 4 : 0
+
+// ──────────────────────────────────────────────
+// DIRECTION INFERENCE
+// ──────────────────────────────────────────────
+dir_score = sk_ms + ac_ms * 50   // skew + scaled autocorr
+dir_long  = sk_ms > 0 or ac_ms > 0.02
+dir_short = sk_ms < 0 or ac_ms < -0.02
+
+// ──────────────────────────────────────────────
+// COMPOSITE SCORES FOR DISPLAY
+// ──────────────────────────────────────────────
+// Normalize each metric to ~[0,100] percentile for display
+vol_score  = pct_rank(vol_ms, pctLen)
+ac_score   = pct_rank(ac_ms,  pctLen)
+sk_score   = pct_rank(sk_ms,  pctLen)
+ku_score   = pct_rank(ku_ms,  pctLen)
+va_score   = pct_rank(va_ms,  pctLen)
+pv_score   = pct_rank(pv_ms,  pctLen)
+
+// Overall "quiet" score (inverted vol — higher = quieter)
+quiet_score = 100 - vol_score
+
+// Overall "chaos" score
+chaos_score = (vol_score + ku_score) / 2.0
+
+// Decoupling score (inverted cross-corr — higher = more decoupled)
+decouple_score = 100 - (xc_sp_pct + xc_va_pct) / 2.0
+
+// ──────────────────────────────────────────────
+// AVERAGE LINE (trung bình 6 metrics)
+// ──────────────────────────────────────────────
+avg_score = (vol_score + ac_score + sk_score + ku_score + va_score + pv_score) / 6.0
+avg_smooth = ta.ema(avg_score, 5)   // EMA(5) để mượt hơn
+
+// ──────────────────────────────────────────────
+// PLOTS — Panel 1: 6 Metrics (percentile) + Average
+// ──────────────────────────────────────────────
+p_avg = plot(avg_smooth, "AVG (6 metrics)", color=color.new(color.white, 0), linewidth=3)
+p_vol = plot(vol_score,  "Vol %",     color=color.new(color.red, 30),    linewidth=2)
+p_ac  = plot(ac_score,   "AutoCorr %", color=color.new(color.blue, 30),   linewidth=1)
+p_sk  = plot(sk_score,   "Skew %",    color=color.new(color.orange, 30), linewidth=1)
+p_ku  = plot(ku_score,   "Kurt %",    color=color.new(color.purple, 30), linewidth=1)
+p_va  = plot(va_score,   "VolAnom %", color=color.new(color.teal, 30),   linewidth=1)
+p_pv  = plot(pv_score,   "PVCorr %",  color=color.new(color.gray, 30),   linewidth=1)
+
+// Fill giữa average và midline 50 — cho thấy bias tổng thể
+p_mid = plot(50, "Midline", color=color.new(color.gray, 80), linewidth=1, style=plot.style_circles)
+fill(p_avg, p_mid,
+     color=avg_smooth > 50 ? color.new(color.red, 90) : color.new(color.green, 90),
+     title="AVG vs Midline Fill")
+
+// Reference lines
+hline(20, "Quiet Threshold",  color=color.new(color.green, 70), linestyle=hline.style_dotted)
+hline(80, "Chaos Threshold",  color=color.new(color.red, 70),   linestyle=hline.style_dotted)
+
+// ──────────────────────────────────────────────
+// ZONE BACKGROUND COLORS
+// ──────────────────────────────────────────────
+zoneColor = switch zone
+    1 => color.new(color.lime,   80)   // S1 Ultra Quiet — bright green
+    2 => color.new(color.green,  82)   // S2 Quiet Storm
+    3 => color.new(color.teal,   82)   // S3 Quiet Decouple
+    4 => color.new(color.olive,  85)   // S4 Just Quiet
+    5 => color.new(color.orange, 80)   // S5 Vol Accel
+    6 => color.new(color.red,    80)   // S6 Chaos
+    => color.new(color.gray, 95)       // No zone
+
+bgcolor(showZone ? zoneColor : na, title="Zone BG")
+
+// ──────────────────────────────────────────────
+// DIRECTION ARROWS
+// ──────────────────────────────────────────────
+plotshape(showDir and zone >= 1 and zone <= 4 and dir_long,
+     title="Long Signal", style=shape.triangleup,
+     location=location.bottom, color=color.new(color.green, 20), size=size.small)
+
+plotshape(showDir and zone >= 1 and zone <= 4 and dir_short,
+     title="Short Signal", style=shape.triangledown,
+     location=location.top, color=color.new(color.red, 20), size=size.small)
+
+plotshape(showDir and (zone == 5 or zone == 6),
+     title="Dual Entry", style=shape.diamond,
+     location=location.absolute, color=color.new(color.yellow, 20), size=size.small)
+
+// ──────────────────────────────────────────────
+// ZONE LABEL (on bar)
+// ──────────────────────────────────────────────
+zoneText = switch zone
+    1 => "S1"
+    2 => "S2"
+    3 => "S3"
+    4 => "S4"
+    5 => "S5"
+    6 => "S6"
+    => ""
+
+var label zoneLbl = na
+if barstate.islast and zone > 0
+    zoneLbl := label.new(bar_index, vol_score,
+         text=zoneText + (dir_long ? " ▲" : dir_short ? " ▼" : " ◆"),
+         style=label.style_label_left,
+         color=zone <= 4 ? color.green : color.red,
+         textcolor=color.white, size=size.normal)
+
+// ──────────────────────────────────────────────
+// TABLE: State Vector Dashboard
+// ──────────────────────────────────────────────
+var table dash = table.new(position.top_right, 4, 11,
+     bgcolor=color.new(color.black, 20),
+     border_width=1, border_color=color.new(color.gray, 50))
+
+if barstate.islast
+    // Header
+    table.cell(dash, 0, 0, "LAYER",    text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 0, "METRIC",   text_color=color.white, text_size=size.small)
+    table.cell(dash, 2, 0, "VALUE",    text_color=color.white, text_size=size.small)
+    table.cell(dash, 3, 0, "PCT",      text_color=color.white, text_size=size.small)
+
+    // L0: Position
+    table.cell(dash, 0, 1, "L0 Pos",   text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 1, "vol",       text_color=color.red,  text_size=size.tiny)
+    table.cell(dash, 2, 1, str.tostring(vol_ms, "#.#####"), text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 3, 1, str.tostring(vol_score, "#.0") + "%",
+         text_color=vol_score < 20 ? color.lime : vol_score > 80 ? color.red : color.white,
+         text_size=size.tiny)
+
+    table.cell(dash, 0, 2, "",          text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 2, "autocorr",  text_color=color.blue, text_size=size.tiny)
+    table.cell(dash, 2, 2, str.tostring(ac_ms, "#.####"), text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 3, 2, str.tostring(ac_score, "#.0") + "%", text_color=color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 3, "",          text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 3, "skew",      text_color=color.orange, text_size=size.tiny)
+    table.cell(dash, 2, 3, str.tostring(sk_ms, "#.####"), text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 3, 3, str.tostring(sk_score, "#.0") + "%", text_color=color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 4, "",          text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 4, "kurt",      text_color=color.purple, text_size=size.tiny)
+    table.cell(dash, 2, 4, str.tostring(ku_ms, "#.####"), text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 3, 4, str.tostring(ku_score, "#.0") + "%", text_color=color.white, text_size=size.tiny)
+
+    // L1: Velocity
+    table.cell(dash, 0, 5, "L1 Vel",   text_color=color.yellow, text_size=size.tiny)
+    table.cell(dash, 1, 5, "d_vol",     text_color=color.red, text_size=size.tiny)
+    table.cell(dash, 2, 5, str.tostring(d_vol, "#.######"),
+         text_color=d_vol > 0 ? color.red : color.lime, text_size=size.tiny)
+    table.cell(dash, 3, 5, d_vol > 0 ? "↑" : "↓",
+         text_color=d_vol > 0 ? color.red : color.lime, text_size=size.tiny)
+
+    // L3: Cross-Correlation
+    table.cell(dash, 0, 6, "L3 XC",    text_color=color.aqua, text_size=size.tiny)
+    table.cell(dash, 1, 6, "sk↔pv",    text_color=color.aqua, text_size=size.tiny)
+    table.cell(dash, 2, 6, str.tostring(xc_sk_pv, "#.###"), text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 3, 6, str.tostring(xc_sp_pct, "#.0") + "%",
+         text_color=xc_sp_pct < 15 ? color.lime : color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 7, "",          text_color=color.aqua, text_size=size.tiny)
+    table.cell(dash, 1, 7, "vol↔ac",   text_color=color.aqua, text_size=size.tiny)
+    table.cell(dash, 2, 7, str.tostring(xc_vol_ac, "#.###"), text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 3, 7, str.tostring(xc_va_pct, "#.0") + "%", text_color=color.white, text_size=size.tiny)
+
+    // AVG row
+    table.cell(dash, 0, 8, "AVG",      text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 8, "6 metrics", text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 2, 8, str.tostring(avg_smooth, "#.0"),
+         text_color=color.white, text_size=size.small)
+    table.cell(dash, 3, 8, avg_smooth < 35 ? "QUIET" : avg_smooth > 65 ? "HOT" : "NORMAL",
+         text_color=avg_smooth < 35 ? color.lime : avg_smooth > 65 ? color.red : color.yellow,
+         text_size=size.small)
+
+    // Zone
+    table.cell(dash, 0, 9, "ZONE",     text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 9, zoneText != "" ? zoneText : "—",
+         text_color=zone <= 4 ? color.lime : zone > 4 ? color.red : color.gray,
+         text_size=size.normal)
+    table.cell(dash, 2, 9, "DIR",       text_color=color.white, text_size=size.small)
+    table.cell(dash, 3, 9, dir_long ? "LONG ▲" : dir_short ? "SHORT ▼" : "NEUTRAL",
+         text_color=dir_long ? color.lime : dir_short ? color.red : color.gray,
+         text_size=size.small)
+
+// ──────────────────────────────────────────────
+// ALERTS
+// ──────────────────────────────────────────────
+alertcondition(zone == 1, "S1 Ultra Quiet",  "Sniper Zone S1 — Ultra quiet + decoupling")
+alertcondition(zone == 2, "S2 Quiet Storm",  "Sniper Zone S2 — Quiet storm forming")
+alertcondition(zone == 5, "S5 Vol Accel",    "Chaos Zone S5 — Volatility accelerating")
+alertcondition(zone == 6, "S6 Chaos",        "Chaos Zone S6 — Extreme vol + fat tails")
+alertcondition(zone[1] == 0 and zone > 0,    "Zone Entry",   "Entered Sniper Zone")

@@ -1,0 +1,52 @@
+Sniper 33-dim Backtest — binance data
+============================================================
+Config: TP=$50.0 SL=$150.0 condition=storm direction=AUTO
+Bars: 100,000
+Position size: 0.01 BTC
+
+Strategy Stats:
+  total_bars: 100000
+  states_computed: 99779
+  conditions_triggered: 205
+  entries_long: 102
+  entries_short: 103
+  exits_tp: 145
+  exits_sl: 55
+  exits_timeout: 5
+  exits_gap: 0
+  total_pnl: -1139.5000000000728
+  wins: 146
+  losses: 59
+  gaps_detected: 0
+
+Performance Metrics:
+  total_trades: 205
+  wins: 146
+  losses: 59
+  win_rate: 71.21951219512195
+  total_pnl: -11.395
+  avg_pnl: -0.05558536585365854
+  gross_profit: 72.666
+  gross_loss: 84.061
+  profit_factor: 0.8644436778054031
+  avg_win: 0.4977123287671233
+  avg_loss: 1.4247627118644068
+  max_drawdown: -13.321
+  sharpe: -0.9002002203672993
+
+Positions Report:
+                                                         trader_id  ... is_snapshot
+position_id                                                         ...            
+BTC-USD-PERP.BINANCE-SniperStrategy-000-a711bb2...  BACKTESTER-001  ...        True
+BTC-USD-PERP.BINANCE-SniperStrategy-000-3a3c0c3...  BACKTESTER-001  ...        True
+BTC-USD-PERP.BINANCE-SniperStrategy-000-0405ad3...  BACKTESTER-001  ...        True
+BTC-USD-PERP.BINANCE-SniperStrategy-000-2cf3f81...  BACKTESTER-001  ...        True
+BTC-USD-PERP.BINANCE-SniperStrategy-000-4bd891b...  BACKTESTER-001  ...        True
+...                                                            ...  ...         ...
+BTC-USD-PERP.BINANCE-SniperStrategy-000-2e415da...  BACKTESTER-001  ...        True
+BTC-USD-PERP.BINANCE-SniperStrategy-000-c22a2ee...  BACKTESTER-001  ...        True
+BTC-USD-PERP.BINANCE-SniperStrategy-000-ad1e2c2...  BACKTESTER-001  ...        True
+BTC-USD-PERP.BINANCE-SniperStrategy-000-3c9d6ca...  BACKTESTER-001  ...        True
+BTC-USD-PERP.BINANCE-SniperStrategy-000             BACKTESTER-001  ...       False
+
+[205 rows x 21 columns]

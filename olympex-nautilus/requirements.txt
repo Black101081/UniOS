@@ -1,0 +1,7 @@
+nautilus_trader>=1.224.0
+pandas
+numpy
+pyarrow
+requests
+huggingface_hub
+matplotlib
